@@ -267,10 +267,14 @@ key-values (map) are retrieved from a credential store and then form a **_Config
 
 ## Rich documentation
 
-val config = descriptor[MyConfig]
 
 ```scala 
- generateDocs(config)
+
+
+val config = descriptor[MyConfig] from constantMap
+
+generateDocs(config)
+  .toTable.toGithubFlavouredMarkdown
 
 ```
 
@@ -303,11 +307,97 @@ val config = descriptor[MyConfig]
 ---
 ## What happens when there is a failure?
 
+provider is **_Credentials_** but forgot **_token_** and **_password_**. 
 
+```scala
+  val source = fromHoconString(
+     {
+       "provider" : {
+         "Credentials" : {
+
+         }
+       }
+     }
+    )
+
+```
+
+**Note** : source is actually **_Either[ReadError[String], ConfigSource]_**
+
+---
+## Hierarchy of Errors - A Tree!
+
+```python
+
+val config = read(config from typesafeConfigSource)
+
+```
+
+will fail with 
+
+```scala
+
+Left(ReadError[String](...))
+
+```
+
+---
+## And that's prettyPrinted!
+
+```scala
+ ╥
+ ╠══╦══╗
+ ║  ║  ║
+ ║  ║  ╠─MissingValue
+ ║  ║  ║ path: provider.Credentials.secret
+ ║  ║  ║ Details: value of type string
+ ║  ║  ▼
+ ║  ║
+ ║  ╠─MissingValue
+ ║  ║ path: provider.Credentials.token
+ ║  ║ Details: value of type string
+ ║  ▼
+ ║
+ ╠─FormatError
+ ║ cause: Provided value is of type Record, expecting the type Leaf
+ ║ path: provider
+ ║ Details: constant string 'Default'
+ ▼
+```
 
 
 ---
+## Saving to any data source 
 
+**Given a `ConfigDescriptor` we can write it back**
+
+```scala
+
+case class MyConfig(db: String, port: Int)
+
+val config: ConfigDescritpor[MyConfig] = 
+  descriptor[MyConfig]
+
+```
+
+
+---
+## Saving to any data source
+
+```scala
+val value: MyConfig = MyConfig("xyz.com", 8080)
+
+value.toJson(config)
+
+// returns: { "db" : "xyz.com", "port" : "8080" }
+
+value.toMap(config)
+
+// returns: Map("db" -> "xyz.com", "port" -> "8080")
+```
+
+
+---
 # [fit] Deckset 
 # [fit] has something
 # [fit] for **_you_**…
