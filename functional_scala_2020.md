@@ -12,6 +12,7 @@ We will see an ecosystem of libraries in Scala.
 
 ---
 
+
 ## Simple Config is easy isn't it?
 
 ```scala
