@@ -4,16 +4,12 @@
 ---
 ## Why is it challenging ?
 
-Managing application configuration can be quite challenging.
-
-We will see why.
-We will see a solution.
-We will see an ecosystem of libraries in Scala.
+Managing application configuration can sound easy, yet ends up being challenging.
 
 ---
 
 
-## Simple Config is easy isn't it?
+## Simple Configs are easy isn't it?
 
 ```scala
 
@@ -31,40 +27,52 @@ in.close();
 
 ## Here are the questions ?
 
-* How do you use these configs? Are they type safe ?
-* What if I need to extract the same config from a different source?
-* How do you ensure you are accumulating the errors?
+* Is your config typesafe? (More of, is your program typsafe?)
+* How do you accumulate the errors?
+* How do you document your config?
+* How do you set an example of your config for users?
 
 
 ---
 ## Continuing these questions
 
-* How do you differentiate between missing values and format errors?
-* How do you **_write_** this config back to a source? Example: Your config is a state file.
-* How do you **_document_** these config?
+* How do you represent multiple sources in your config?
+* How do you prioritise sources?
+* How do you test these config without heavy weight sources?
 
 ---
 ## And a few advanced questions?
 
-* How do you compose configuration parameters? 
-* While there are automatic derivations (spring boot in Java) how do you combine this behaviour with a composable versions?
+* How do you validate your config parameters? 
+* And how to statically represent the validated config?
+* How do you write the config back to the source if needed?
 
 ---
 
 ## Let's see some example code using ZIO-Config
 
-The best way to describe your config is a case class.
-
 ```scala
 
-final case class MyConfig(username: String, password: String)
+// The config
+final case class MyConfig(host: String, port: Int)
 
-val source = ConfigSource.fromMap(..)
+```
 
-val config = description[MyConfig]
+---
 
-val result: Either[ReadError[K], MyConfig] = 
-  read(config from source) 
+## Example usage (Automatic)
+
+```scala
+val source = ConfigSource.fromMap(
+  Map("host" -> "aurora.db", "port" -> "8080")
+)
+
+val config: ConfigDescriptor[MyConfig] = 
+  description[MyConfig] from source
+
+read(config from source) 
+
+// Right("aurora.db",8080)  
 
 
 ```
@@ -72,9 +80,10 @@ val result: Either[ReadError[K], MyConfig] =
 ---
 ## Where is typesafety ?
 
-Define your data type
+Bring config into static world!
 
 ```scala
+
 
 sealed trait CredentialsProvider
 
@@ -87,18 +96,77 @@ case class Credentials(token: String, secret: String)
 
 ---
 
-Read config to your data type
+## Where is typesafety ?
 
 ```scala
 
-case class Config(provider: CredentialsProvider)
+// your config
+case class MyConfig(provider: CredentialsProvider)
 
-val config = descriptor[Config]
+val config = descriptor[Config] from ConfigSource.fromMap(Map.empty)
 
-read(config from source)
+read(config)
+// If success, it returns either MyConfig(Credentials(..)) or MyConfig(Default)
+
+```
+
+---
+
+## And if it fails, errors are accumulated
+
+
+```scala
+ ╥
+ ╠══╦══╗
+ ║  ║  ║
+ ║  ║  ╠─MissingValue
+ ║  ║  ║ path: provider.Credentials.secret
+ ║  ║  ║ Details: value of type string
+ ║  ║  ▼
+ ║  ║
+ ║  ╠─MissingValue
+ ║  ║ path: provider.Credentials.token
+ ║  ║ Details: value of type string
+ ║  ▼
+ ║
+ ╠─FormatError
+ ║ cause: Provided value is of type Record, expecting the type Leaf
+ ║ path: provider
+ ║ Details: constant string 'Default'
+ ▼
+```
+
+---
+
+## Composable ConfigSource
+
+**_ConfigSource_** is composable within itself.
+
+This means
+
+```scala
+val sysEnv: ConfigSource = ???
+
+val commandLine: ConfigSource = ??? 
+
+val mySource = sysEnv orElse commandLine
+
+val result = read(config from mySource)
+
+// Tries systemEnv first, and if it fails tries CommandLine
+
+```
+
+---
+## Flexible ConfigSource
+
+Attach ConfigSource to any part of your program
+
+```scala
 
 
 ```
+
 
 ---
 
