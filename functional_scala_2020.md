@@ -427,23 +427,57 @@ val updatedConfig =
 
 ---
 
-[STOP]
+## Manual descriptor 
+
+```
+  // Example: New type
+  final case class Port(n: Int)
+
+  val portCfg = int("port").transformOrFail(
+    s => if (s < 1000) Left("port should be greater than 1000") else Right(Port(s)),
+    port => Right(port.n)
+  )
+
+```
 
 ---
 
-## How about manual all the way?
+## Manual descriptor
+
+```
+
+ final case class Host(url: String)
+
+ final case class MyConfig(port: Port, host: String)
+
+ val hostCfg = string("host")
+
+ val config = (portCfg |@| string("host"))(MyConfig.apply, MyConfig.unapply)
+
+```
 
 
+---
 
+[Stop]
 
 ---
 
 ## Custom Config Source
 
-In the last example, credentialSource is a custom **_ConfigSource_** .
 
-key-values (map) are retrieved from a credential store and then form a **_ConfigSource_** from this map.
+```scala
 
+ // Example
+ def credentialSource(client: SystemManager): Task[ConfigSource] =
+   client.getParameters("/path").flatMap(kv => ConfigSource.fromMap(kv)()
+
+ credentialStore(client).flatMap(creds =>
+  (string("username") from sysEnv |@|
+    string("password") from creds)(MyConfig.apply, MyConfig.unapply)
+ )
+
+```
 
 ---
 
@@ -484,31 +518,6 @@ Left(ReadError[String](...))
 ```
 
 ---
-## And that's prettyPrinted!
-
-```scala
- ╥
- ╠══╦══╗
- ║  ║  ║
- ║  ║  ╠─MissingValue
- ║  ║  ║ path: provider.Credentials.secret
- ║  ║  ║ Details: value of type string
- ║  ║  ▼
- ║  ║
- ║  ╠─MissingValue
- ║  ║ path: provider.Credentials.token
- ║  ║ Details: value of type string
- ║  ▼
- ║
- ╠─FormatError
- ║ cause: Provided value is of type Record, expecting the type Leaf
- ║ path: provider
- ║ Details: constant string 'Default'
- ▼
-```
-
-
----
 ## Saving to any data source 
 
 **Given a `ConfigDescriptor` we can write it back**
@@ -521,86 +530,12 @@ val config: ConfigDescritpor[MyConfig] =
   descriptor[MyConfig]
 
 ```
-
-
----
-## Saving to any data source
-
-```scala
-val value: MyConfig = MyConfig("xyz.com", 8080)
-
-value.toJson(config)
-
-// returns: { "db" : "xyz.com", "port" : "8080" }
-
-value.toMap(config)
-
-// returns: Map("db" -> "xyz.com", "port" -> "8080")
-```
-
-
----
-# [fit] Deckset 
-# [fit] has something
-# [fit] for **_you_**…
-
-
----
-
-# [fit] Here is 
-# [fit] The lowdown
-
----
-
-# [fit] **_1_**
-
----
-
-# [fit] Add _**[fit]**_ 
-
----
-
-# [fit] To the start
-# [fit] of any headline
-
----
-
-# [fit] _**(After the hash & before the headline)**_
-# [fit] _**Like so:**_ `# [fit] Your awesome headline`
-
----
-
-# [fit] **_2_**
-
----
-
-# [fit] Only 
-# [fit] use Headlines
-# [fit] _**Start it with a # — no Paragraphs or lists within your slide**_
-
----
-
-# [fit] **_3_**
-
----
-
-# [fit] Go forth and create:
-
----
-
-# [fit] Impact
-
----
-
-# [fit] &
-
 ---
 
 # [fit] Focus
 
 ---
 
-# [fit] :heart:
 
 
 
