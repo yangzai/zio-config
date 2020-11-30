@@ -48,4 +48,17 @@ object RefinedReadConfig extends App {
 
   // Right(RefinedProd(ldap,1999,Some(ddd),List(1234, 2345, 3456)))
 
+
+  case class RefinedPro2d(
+    port: Refined[Int, GreaterEqual[W.`1024`.T]],
+    dbUrl: Option[Refined[String, NonEmpty]]
+  )
+
+  val source =
+    ConfigSource.fromMap(Map("port" -> "10", "dbUrl" -> ""))
+
+  val config = read(descriptor[RefinedPro2d] from source)
+
+  println(config)
+
 }

@@ -1,5 +1,5 @@
 
-## Make your application config easy
+## Make your config easy..
 
 ---
 ## Why is it challenging ?
@@ -60,17 +60,48 @@ final case class MyConfig(host: String, port: Int)
 
 ---
 
-## Example usage (Automatic)
+## Example usage
 
 ```scala
-val source = ConfigSource.fromMap(
-  Map("host" -> "aurora.db", "port" -> "8080")
-)
+
+// Given a source
+
+val source: ConfigSource = 
+  ConfigSource.fromMap(
+    Map(
+      "host" -> "aurora.db", 
+      "port" -> "8080"
+   )
+ )
+
+```
+
+---
+## Example usage: Automatic
+
+```scala
 
 val config: ConfigDescriptor[MyConfig] = 
   description[MyConfig] from source
 
-read(config from source) 
+read(config) 
+
+// Right("aurora.db",8080)  
+
+
+```
+
+---
+## Example usage : Manual
+
+```scala
+
+// Manual
+val config: ConfigDescriptor[MyConfig] = 
+  (string("host") |@| int("port"))(MyConfig.apply, MyConfig.unapply)
+
+
+read(config) 
 
 // Right("aurora.db",8080)  
 
@@ -80,10 +111,9 @@ read(config from source)
 ---
 ## Where is typesafety ?
 
-Bring config into static world!
-
 ```scala
 
+// Bring config into static world!
 
 sealed trait CredentialsProvider
 
@@ -103,10 +133,11 @@ case class Credentials(token: String, secret: String)
 // your config
 case class MyConfig(provider: CredentialsProvider)
 
-val config = descriptor[Config] from ConfigSource.fromMap(Map.empty)
+val config: ConfigDescriptor[MyConfig] = 
+  descriptor[Config] from source
 
 read(config)
-// If success, it returns either MyConfig(Credentials(..)) or MyConfig(Default)
+// MyConfig(Credentials(..))
 
 ```
 
@@ -158,70 +189,173 @@ val result = read(config from mySource)
 ```
 
 ---
+
 ## Flexible ConfigSource
 
 Attach ConfigSource to any part of your program
 
 ```scala
 
+val x = string("username") from systemEnv
+val y = string("password") from credentialSource
+
+
+```
+---
+
+## Rich documentation
+
+
+```scala 
+
+
+val config = descriptor[MyConfig] from source
+
+generateDocs(config)
+  .toTable.toGithubFlavouredMarkdown
 
 ```
 
 
 ---
 
-## Program is independent of actions.
+![](markdown.png)
 
-`config` above is independent of an action
+
+---
+
+## Generate a Config for user to begin with
 
 ```scala
 
-import zio.config._, ConfigDescriptor._, magnolia._
+ sealed trait Region
 
-val config = description[MyConfig]
+ @name("ap-southeast")
+ case object ApSouthEast2 extends Region
 
-read(config from source)
+ @name("usEast")
+ case object UsEast extends Region
 
-//Right(MyConfig(user, pass))
+ final case class Database(port: Int, host: java.net.URL)
+ final case class MyConfig(region: Region, database: Database)
 
 
 ```
 
 ---
-## We have more such actions
-
-
-We will see more actions similar to **_read_**, such as **_write_**, **_generateDocs_** etc.
-
-
-
----
-
-### Independent Config and ConfigSource
-
-config is completely independent of `ConfigSource`.
-
-Implies, we can attach config to any ConfigSource
-
----
-
-##
+## Generate a Config for user to begin with
 
 ```scala
 
-val configSource: Either[ReadError[String], ConfigSource] = 
-  TypesafeConfigSource.fromHoconFile(new File("path-to-file"))
+generateConfigJson(descriptor[MyConfig], 2).unsafeRunChunk
 
- configSource.flatMap(source => read(config from source)
- // Right(MyConfig(name, pass)
+// yields 
+
+Chunk({
+    "database" : {
+        "host" : "http://def",
+        "port" : "7300"
+    },
+    "region" : "ap-southeast"
+  }
+, {
+    "database" : {
+        "host" : "http://abc",
+        "port" : "8908"
+    },
+    "region" : "usEast"
+  }
+)
+
+```
+
+---
+## Because it can write back!
+
+```scala
+
+  val config: ConfigDescriptor[MyConfig] = 
+    descriptor[MyConfig]
+
+  val myConfig: MyConfig = 
+    MyConfig(UsEast, Database(8908, http://abc))
+
+  myConfig.toJson(config)
+  myConfig.toMap(config)
 
 ```
 
 ---
 
-## We have more such sources
+## Work with Refined types
+
 
 ```scala
+
+ // No more manual validations
+
+ case class RefinedConfig(
+    port: Refined[Int, GreaterEqual[W.`1024`.T]],
+    dbUrl: Option[Refined[String, NonEmpty]]
+  )
+
+```
+
+---
+
+## Work with Refined types
+
+```scala
+
+  val invalidSource =
+    ConfigSource.fromMap(
+      Map("port" -> "10", "dbUrl" -> "")
+    )
+
+  read(
+    descriptor[RefinedConfig] from invalidSource
+  )
+ 
+
+```
+
+
+---
+## Work with Refined types
+
+```scala 
+
+// fail with
+
+  Left(ReadError:
+  ╥
+  ╠══╦══╗
+  ║  ║  ║
+  ║  ║  ╠─ConversionError
+  ║  ║  ║ cause: Predicate isEmpty() did not fail.
+  ║  ║  ║ path: dbUrl
+  ║  ║  ▼
+  ║  ║
+  ║  ╠─ConversionError
+  ║  ║ cause: Predicate (10 < 1024) did not fail.
+  ║  ║ path: port
+  ║  ▼
+  ▼)
+
+
+```
+
+---
+
+## Let's lens through..
+
+---
+
+
+## Ok? What are the sources supported?
+
+```scala
+
 
 val mapSource = ConfigSource.fromMap(..)
 
@@ -241,91 +375,70 @@ val yamlSource = YamlConfigSource.fromYamlFile(...)
 
 ```
 
-
 ---
-## Data source overrides
+## Priortised config source
 
-**_ConfigSource_** is composable within itself.
 
-This means
+```scala    
+  
+  // <> is orElse
+  val source = 
+   commandLine <> systemEnv <> propertySource
+
+```
+---
+
+## Attach sources to descriptor
 
 ```scala
-val sysEnv: ConfigSource = ???
+val typesafeSource =
+  TypesafeConfigSource.fromHoconFile(..)
 
-val commandLine: ConfigSource = ??? 
+val config =
+  descriptor[MyConfig] from typesafeSource
+ 
+```
+---
 
-val mySource = sysEnv orElse commandLine
+## Update sources of descriptor
 
-val result = read(config from mySource)
+```scala
+  val constantSource = ConfigSource.fromMap(...)
 
-// Tries systemEnv first, and if it fails tries CommandLine
+  val udpatedConfig = 
+    config.updateSource(_ <> constantSource)
 
 ```
 
 ---
 
-## Data source overrides
-
-Or you can update an existing config that is already tagged to a ConfigSource
-
-```scala
-val typesafeSource  = TypesafeConfigSource.fromHoconFile(..)
-val configFromHocon = descriptor[MyConfig] from typesafeSource
-val constantSource   = ConfigSource.fromMap(...)
-
-val udpatedConfig = configFromHocon.updateSource(
-  existingSource => existingSource.orElse(constantSource)
-)
-
-
-```
-
----
-
-## Strip off a source from Config
+## Strip off a source from descriptor
 
 ```scala
 
-val unsourcedConfig = configFromHocon.unsourced
+val unsourcedConfig = 
+  config.unsourced
 
 // And may be attach a constant map in your tests.
-val updatedConfig = configFromHocon.unsourced.from(constantSource)
-
+val updatedConfig =
+  config.unsourced.from(constantSource)
 
 ```
 
 ---
-## Tag source to each field
 
-```scala
-val x = string("username") from systemEnv
-val y = string("password") from credentialSource
+[STOP]
 
-val detailedConfig = (x |@| y)(MyConfig.apply, MyConfig.unapply) 
+---
 
-// and then read(detailedConfig)
-// Manual derivation - we will cover this later.
-```
+## How about manual all the way?
 
-----
 
-## Override with a global source
-
-```scala
-val hoconSource = TypesafeConfigSource.fromFile(..)
-
-val finalConfig = detailedConfig from hoconSource
-
-// and then read(finalConfig)
-
-// Priority is the sources attached invididually, and then the global source
-
-```
 
 
 ---
 
-## Custom Source
+## Custom Config Source
 
 In the last example, credentialSource is a custom **_ConfigSource_** .
 
@@ -334,46 +447,6 @@ key-values (map) are retrieved from a credential store and then form a **_Config
 
 ---
 
-## Rich documentation
-
-
-```scala 
-
-
-val config = descriptor[MyConfig] from constantMap
-
-generateDocs(config)
-  .toTable.toGithubFlavouredMarkdown
-
-```
-
----
-
-## Result of documentation
-
-```scala
-## Configuration Details
-|FieldName           |Format                |Description|Sources|
-|---                 |---                   |---        |---    |
-|[provider](provider)|[any-one-of](provider)|           |       |
-
-### provider
-|FieldName                 |Format               |Description              |Sources |
-|---                       |---                  |---                      |---     |
-|[Credentials](credentials)|[all-of](credentials)|                         |        |
-|                          |primitive            |constant string 'Default'|constant|
-
-### Credentials
-|FieldName|Format   |Description         |Sources |
-|---      |---      |---                 |---     |
-|token    |primitive|value of type string|constant|
-|secret   |primitive|value of type string|constant|
-```
----
-
-![](markdown.png)
-
----
 ## What happens when there is a failure?
 
 provider is **_Credentials_** but forgot **_token_** and **_password_**. 
