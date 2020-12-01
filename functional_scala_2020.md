@@ -66,6 +66,9 @@ final case class MyConfig(host: String, port: Int)
 
 ```
 
+^ As most of you would have thought, we represent config as products & coproducts - scala case classes and sealed traits.
+
+
 ---
 
 ## Example usage
@@ -153,27 +156,26 @@ read(config)
 ---
 
 ## And if it fails, errors are accumulated
-
-
 ```scala
- ╥
- ╠══╦══╗
- ║  ║  ║
- ║  ║  ╠─MissingValue
- ║  ║  ║ path: provider.Credentials.secret
- ║  ║  ║ Details: value of type string
- ║  ║  ▼
- ║  ║
- ║  ╠─MissingValue
- ║  ║ path: provider.Credentials.token
- ║  ║ Details: value of type string
- ║  ▼
- ║
- ╠─FormatError
- ║ cause: Provided value is of type Record, expecting the type Leaf
- ║ path: provider
- ║ Details: constant string 'Default'
- ▼
+        ╥
+        ╠══╦══╗
+        ║  ║  ║
+        ║  ║  ╠─MissingValue
+        ║  ║  ║ path: provider.Credentials.secret
+        ║  ║  ║ Details: value of type string
+        ║  ║  ▼
+        ║  ║
+        ║  ╠─MissingValue
+        ║  ║ path: provider.Credentials.token
+        ║  ║ Details: value of type string
+        ║  ▼
+        ║
+        ╠─FormatError
+        ║ cause: Provided value is of type Record, expecting the type Leaf
+        ║ path: provider
+        ║ Details: constant string 'Default'
+        ▼
+
 ```
 
 ---
@@ -182,23 +184,20 @@ read(config)
 
 
 ```scala
-val sysEnv: ConfigSource = ???
 
-val commandLine: ConfigSource = ??? 
+val sysEnv: ConfigSource = fromSystemEnv
+val commandLine: ConfigSource = fromCommandLineArgs 
 
 // orElse
 val mySource = sysEnv <> commandLine
-
-val result = read(config from mySource)
+read(config from mySource)
 
 
 ```
 
 ---
 
-## Managing multiple sources
-
-Attach ConfigSource to any part of your program
+## Attach ConfigSource to ConfigDescriptor
 
 ```scala
 
@@ -213,11 +212,9 @@ val y = string("password") from credentialSource
 
 ## Rich documentation
 
-
 ```scala 
-
-
-val config = descriptor[MyConfig] from source
+val config: ConfigDescriptor[MyConfig] = 
+  descriptor[MyConfig] from source
 
 generateDocs(config)
   .toTable.toGithubFlavouredMarkdown
@@ -386,7 +383,7 @@ val yamlSource = YamlConfigSource.fromYamlFile(...)
 ```
 
 ---
-## Priortised config source
+## Prioritised config source
 
 
 ```scala    
