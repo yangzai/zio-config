@@ -2,12 +2,6 @@
 ## Make your config easy..
 
 ---
-## Why is it challenging ?
-
-Managing application configuration can sound easy, yet ends up being challenging.
-
----
-
 
 ## Simple Configs are easy isn't it?
 
@@ -23,29 +17,43 @@ in.close();
 
 ```
 
+
+^ Configuration Management can be as easy as grabbing a set of key-value pairs as string
+from any source. But it depends on what exactly you are doing with these config.
+From the perspecitve of developing a configuration driven application, something that you
+probably expose to the users that they fill in these configs, it gets complicated when you 
+try and answer a few important questions.
+
 ---
 
 ## Here are the questions ?
 
-* Is your config typesafe? (More of, is your program typsafe?)
+* Is your config typesafe? 
 * How do you accumulate the errors?
 * How do you document your config?
 * How do you set an example of your config for users?
 
+^ Goes back to the question of how logically consistent your application is.
+ Config retrieval is starting point of your application. It's much better to bring that
+ consistency as early as possible. Isn't it muuch better if the types says the list is always of
+ the size greater than 2 than checking it at every point, or forgetitng to check it at every point
+ leading to bugs?
+ when you try and form a typesafe config from some information lying outside, there are chances
+ that it can fail. Do you fail early or do you give a complete report of what needs to be done?
+ How do you actually document this config? Do we do that manually? Probably for the most time yes.
+ And that documentation can quickly become old in a few days of time. Do you expect the user to read this big doc (automated or manual) to actually write a config. The answer
+ should be No.
+
 
 ---
-## Continuing these questions
+## and more..
 
-* How do you represent multiple sources in your config?
-* How do you prioritise sources?
-* How do you test these config without heavy weight sources?
+* How do you manage multiple sources in your config?
+* How do you prioritise these sources?
+* How do you test the config logic when the source is a heavy weight?
+* In case you want to write the config back ?..
 
----
-## And a few advanced questions?
-
-* How do you validate your config parameters? 
-* And how to statically represent the validated config?
-* How do you write the config back to the source if needed?
+We will cover these and a lot more..
 
 ---
 
@@ -73,6 +81,7 @@ val source: ConfigSource =
       "port" -> "8080"
    )
  )
+
 
 ```
 
@@ -169,28 +178,25 @@ read(config)
 
 ---
 
-## Composable ConfigSource
+## Managing multiple sources
 
-**_ConfigSource_** is composable within itself.
-
-This means
 
 ```scala
 val sysEnv: ConfigSource = ???
 
 val commandLine: ConfigSource = ??? 
 
-val mySource = sysEnv orElse commandLine
+// orElse
+val mySource = sysEnv <> commandLine
 
 val result = read(config from mySource)
 
-// Tries systemEnv first, and if it fails tries CommandLine
 
 ```
 
 ---
 
-## Flexible ConfigSource
+## Managing multiple sources
 
 Attach ConfigSource to any part of your program
 
@@ -198,6 +204,8 @@ Attach ConfigSource to any part of your program
 
 val x = string("username") from systemEnv
 val y = string("password") from credentialSource
+
+(x |@| y)(MyConfig.apply, MyConfig.unapply)
 
 
 ```
@@ -224,7 +232,7 @@ generateDocs(config)
 
 ---
 
-## Generate a Config for user to begin with
+## Generate a Config for user
 
 ```scala
 
@@ -243,7 +251,7 @@ generateDocs(config)
 ```
 
 ---
-## Generate a Config for user to begin with
+## Generate a Config for user
 
 ```scala
 
@@ -270,7 +278,7 @@ Chunk({
 ```
 
 ---
-## Because it can write back!
+## That's coz it can write back!
 
 ```scala
 
@@ -295,9 +303,11 @@ Chunk({
  // No more manual validations
 
  case class RefinedConfig(
-    port: Refined[Int, GreaterEqual[W.`1024`.T]],
-    dbUrl: Option[Refined[String, NonEmpty]]
-  )
+   port: Refined[Int, GreaterEqual[W.`1024`.T]],
+   dbUrl: Option[Refined[String, NonEmpty]]
+ )
+
+ More it is in static, the more it is reliable..
 
 ```
 
@@ -347,7 +357,7 @@ Chunk({
 
 ---
 
-## Let's lens through..
+### Let's dive in a bit more..
 
 ---
 
@@ -429,7 +439,7 @@ val updatedConfig =
 
 ## Manual descriptor 
 
-```
+```scala
   // Example: New type
   final case class Port(n: Int)
 
@@ -444,7 +454,7 @@ val updatedConfig =
 
 ## Manual descriptor
 
-```
+```scala
 
  final case class Host(url: String)
 
@@ -456,91 +466,297 @@ val updatedConfig =
 
 ```
 
-
 ---
 
-[Stop]
-
----
-
-## Custom Config Source
-
+## Data types
 
 ```scala
+ val config: ConfigDescriptor[String] = 
+   string("username")
 
- // Example
- def credentialSource(client: SystemManager): Task[ConfigSource] =
-   client.getParameters("/path").flatMap(kv => ConfigSource.fromMap(kv)()
-
- credentialStore(client).flatMap(creds =>
-  (string("username") from sysEnv |@|
-    string("password") from creds)(MyConfig.apply, MyConfig.unapply)
- )
+ // says, key username has a value of the type string
 
 ```
 
 ---
 
-## What happens when there is a failure?
-
-provider is **_Credentials_** but forgot **_token_** and **_password_**. 
+## Data types
 
 ```scala
-  val source = fromHoconString(
-     {
-       "provider" : {
-         "Credentials" : {
 
-         }
-       }
-     }
+ 
+ val config: ConfigDescriptor[List[Int]] = 
+  list("ports")(int)
+ //  says key usernames has a value of the type of list of string
+
+```
+
+---
+
+## Interestingly
+
+There needn't be keys too. We will see why
+
+```scala
+
+  val strConfig: ConfigDescriptor[Int] = 
+    int("port") 
+
+  val listConfig: ConfigDescriptor[List[Int]] =
+    list("ports")(int)
+
+```
+
+---
+
+## Interestingly
+
+There needn't be keys too. We will see why
+
+```scala
+
+  val strConfig: ConfigDescriptor[Int] = 
+    int 
+
+  val listConfig: ConfigDescriptor[List[Int]] =
+    list(int)
+
+```
+
+---
+
+### An example of a list
+
+```scala
+
+ case class Data(bucket: String, prefix: String)
+ case class Config(tables: List[Data])
+  
+ val config = 
+  list("tables")(descriptor[Data])(Config.apply, Config.unapply)
+
+ // Same as: val config = descriptor[Config]
+
+```
+
+---
+
+## An example of Either
+
+```scala
+ 
+ val config = nested("version")(double orElseEither string)
+
+ // Same as: int("version") orElseEither string("version")
+
+```
+
+
+---
+
+## An example of Either
+
+```scala
+
+ val source = fromHoconString(
+   {
+     "version" : "1.1" 
+   } 
+  )
+
+ read(config from source)
+
+ // Left(1.1)
+
+```
+
+
+
+---
+
+## An example of Either
+
+```scala
+
+ val source = fromHoconString(
+   {
+     "version" : "latest" 
+   } 
+  )
+
+ read(config from source)
+
+ // Right("latest")
+
+```
+
+---
+## Leak of datastructures in Config
+
+```scala
+  
+sealed trait VersionStrategy
+
+  object VersionStrategy {
+    case object Latest        extends VersionStrategy
+    case class Number(n: Int) extends VersionStrategy
+  }
+
+  final case class VersionInfo(name: String, strategy: VersionStrategy)
+
+ 
+```
+---
+
+## Leak of datastructure in Config
+
+```scala
+
+  final case class Database(host: java.net.URL, port: Int)
+
+  // Think of how this would look in actual source
+  final case class MyConfig(
+    database: Database, versionInfo: VersionInfo, inputDir: String
+  )
+
+
+```
+
+---
+
+## Is fully automatic the way to go?
+
+```scala
+ // A fully automatic VersionInfo would 
+ // require a config (if json) to be like this. Hmmm ?
+ 
+    {                                 {
+      "versionInfo" : {                 "versionInfo" : {
+         "name" : "version",    OR        "name" : "version",
+         "strategy" : {                   "strategy" : "latest"
+            "Number" : {                 }   
+               "n" : 1                 }       
+            }                               
+         }                                 
+      }                                                                   
+    }                                                                         
+                                           
+ 
+```
+
+---
+
+## Was that as simple as this ?
+
+
+```scala
+  // Far simpler for user
+ 
+  "versionInfo" : {          
+    "version" : "1"         
+   }                           
+
+   // or
+
+  "versionInfo" : {
+    "version" : "latest"
+   }
+
+```
+
+---
+
+## Let's write a manual config
+
+```scala
+
+  val versionConfig = 
+    map(int.orElseEither(string).transformOrfail(
+      _.headOption match {
+          case Some((k, v)) => 
+            versionValue match {
+              case Right(string) if string == "latest" => Right(VersionInfo(k, Latest))
+              case Left(n) => Right(VersionInfo(k, Number(n)))
+              case Right(v) => Left(..) 
+            }
+          case None => Left(..)
+      },  
+      i => i.strategy match {
+         case Latest => Map(i.name -> Right("latest"))
+         case Number(n) => Map(i.name -> Left(n))
+      }
     )
 
 ```
 
-**Note** : source is actually **_Either[ReadError[String], ConfigSource]_**
-
 ---
-## Hierarchy of Errors - A Tree!
 
-```python
+## Let's use automatic for the rest
 
-val config = read(config from typesafeConfigSource)
-
+```scala
+  implicit val versionInfo: Descriptor[VersionInfo] = 
+    Descriptor(versionConfig)
+  
+  val config = descriptor[MyConfig]    
 ```
 
-will fail with 
+---
+
+## How do you communicate this to the user
 
 ```scala
 
-Left(ReadError[String](...))
+  val config = descriptor[MyConfig]
+
+  generateConfigJson(config, 1).unsafeRunChunk
+
+ // yields 
+
+    {
+       "database" : {
+           "host" : "http://abc",
+           "port" : "5502"
+       },
+       "inputDir" : "5Vf0GTG",
+       "versionInfo" : {
+           "QK8mNc5eciBlH" : "latest"
+       }
+    } 
 
 ```
 
 ---
-## Saving to any data source 
 
-**Given a `ConfigDescriptor` we can write it back**
+## May be change the keys to kebab case 
 
 ```scala
 
-case class MyConfig(db: String, port: Int)
+  val config = descriptor[MyConfig].mapKey(toKebabCase)
 
-val config: ConfigDescritpor[MyConfig] = 
-  descriptor[MyConfig]
+  generateConfigJson(config, 1).unsafeRunChunk
+
+ // yields 
+
+    {
+       "database" : {
+           "host" : "http://abc",
+           "port" : "5502"
+       },
+       "input-dir" : "5Vf0GTG",
+       "version-info" : {
+           "QK8mNc5eciBlH" : "latest"
+       }
+    } 
 
 ```
----
-
-# [fit] Focus
 
 ---
 
+## And a lot more
 
-
-
-
-
-
-
-
+ https://github.com/zio/zio-config/tree/gen/examples
+ 
+ https://zio.github.io/zio-config/
+ 
+ https://javadoc.io/doc/dev.zio/zio-config_2.12/latest/index.html
+ 
