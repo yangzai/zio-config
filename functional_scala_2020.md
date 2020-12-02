@@ -31,7 +31,7 @@ try and answer a few important questions.
 * Is your config typesafe? 
 * How do you accumulate the errors?
 * How do you document your config?
-* How do you set an example of your config for users?
+* How do you set an example of your config for the end user?
 * How do you manage multiple sources in your config?
 
 We will cover these and a lot more..
@@ -134,16 +134,20 @@ object CredentialsProvier {
 
 ```scala
 
-case class MyConfig(provider: CredentialsProvider)
+final case class MyConfig(provider: CredentialsProvider)
 
-object MyConfig {
-  val config: ConfigDescriptor[MyConfig] = 
-    descriptor[MyConfig] from source
-}
+val config: ConfigDescriptor[MyConfig] = 
+ descriptor[MyConfig]
 
-// Pass the program to read action
-read(MyConfig.config)
-// MyConfig(Credentials(..))
+val source =
+  ConfigSource.fromMap(
+    "provider.Credentials" -> "invalid", 
+     keyDelimiter = Some('.')
+  )
+
+read(config from source)
+
+// yields pretty printed error message
 
 ```
 
@@ -179,10 +183,10 @@ read(MyConfig.config)
 
 ```scala
 
-val sysEnv: ConfigSource = fromSystemEnv
+val sysEnv:      ConfigSource = fromSystemEnv
 val commandLine: ConfigSource = fromCommandLineArgs 
 
-// orElse
+// <> is orElse
 val mySource = sysEnv <> commandLine
 
 read(config from mySource)
@@ -196,15 +200,18 @@ read(config from mySource)
 
 ```scala
 
-// Individually tag sources
+// Tag sources per field
 val x = string("username") from systemEnv
 val y = string("password") from credentialSource
 
 val config: ConfigDescriptor[MyConfig] = 
  (x |@| y)(MyConfig.apply, MyConfig.unapply)
+
+val testSource = 
+ ConfigSource.fromMap(Map("username" -> "x", "password" -> "y"))
  
 // Override all sources with a constant mapSource
-config.updateSource(complexSource => mapSource <> complexSource)
+config.updateSource(source => testSource <> source)
 
 ```
 ---
@@ -272,7 +279,7 @@ Chunk({
         "host" : "http://abc",
         "port" : "8908"
     },
-    "region" : "usEast"
+    "region" : "us-east"
   }
 )
 
@@ -289,8 +296,8 @@ Chunk({
   val myConfig: MyConfig = 
     MyConfig(UsEast, Database(8908, http://abc))
 
-
   // Pass program to toMap action
+  // write(description, myConfig).map(tree => ..)
   myConfig.toMap(description)
 
    Map(
@@ -420,11 +427,11 @@ val yamlSource = YamlConfigSource.fromYamlFile(...)
 ## Attach sources to descriptor
 
 ```scala
-val typesafeSource =
+val hoconSource =
   TypesafeConfigSource.fromHoconFile(..)
 
 val config =
-  descriptor[MyConfig] from typesafeSource
+  descriptor[MyConfig] from hoconSource
  
 ```
 ---
@@ -478,8 +485,8 @@ val updatedConfig =
  
  val config: ConfigDescriptor[List[Int]] = 
   list("ports")(int)
- // if string("username")   ==> key username has a value of type String
- // then list("ports")(int) ==> says key "ports" has value of type of List[Int]
+ // if string("username")   ==> there exists key "username" and value is of type String
+ // then list("ports")(int) ==> there exists key "ports" and value is of type List[Int]
 
 ```
 
