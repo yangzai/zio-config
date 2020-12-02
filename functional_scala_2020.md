@@ -32,6 +32,9 @@ try and answer a few important questions.
 * How do you accumulate the errors?
 * How do you document your config?
 * How do you set an example of your config for users?
+* How do you manage multiple sources in your config?
+
+We will cover these and a lot more..
 
 ^ Goes back to the question of how logically consistent your application is.
  Config retrieval is starting point of your application. It's much better to bring that
@@ -43,17 +46,6 @@ try and answer a few important questions.
  How do you actually document this config? Do we do that manually? Probably for the most time yes.
  And that documentation can quickly become old in a few days of time. Do you expect the user to read this big doc (automated or manual) to actually write a config. The answer
  should be No.
-
-
----
-## and more..
-
-* How do you manage multiple sources in your config?
-* How do you prioritise these sources?
-* How do you test the config logic when the source is a heavy weight?
-* In case you want to write the config back ?..
-
-We will cover these and a lot more..
 
 ---
 
@@ -82,8 +74,8 @@ val source: ConfigSource =
     Map(
       "host" -> "aurora.db", 
       "port" -> "8080"
-   )
- )
+    )
+  )
 
 
 ```
@@ -94,11 +86,11 @@ val source: ConfigSource =
 ```scala
 
 val config: ConfigDescriptor[MyConfig] = 
-  description[MyConfig] from source
+  descriptor[MyConfig] from source
 
 read(config) 
 
-// Right("aurora.db",8080)  
+// Right(MyConfig("aurora.db",8080))  
 
 
 ```
@@ -110,12 +102,12 @@ read(config)
 
 // Manual
 val config: ConfigDescriptor[MyConfig] = 
-  (string("host") |@| int("port"))(MyConfig.apply, MyConfig.unapply)
+  (string("host") |@| int("port"))(MyConfig.apply, MyConfig.unapply) 
 
 
-read(config) 
+read(config from source) 
 
-// Right("aurora.db",8080)  
+// Right(MyConfig("aurora.db",8080))  
 
 
 ```
@@ -126,13 +118,13 @@ read(config)
 ```scala
 
 // Bring config into static world!
-
 sealed trait CredentialsProvider
 
-case object Default extends CredentialsProvider
-
-case class Credentials(token: String, secret: String) 
-  extends CredentialsProvider
+// We define the terms in ADT in a companion object
+object CredentialsProvier {
+  case object Default extends CredentialsProvider
+  case class Credentials(token: String, secret: String) extends CredentialsProvider
+}
 
 ```
 
@@ -142,13 +134,15 @@ case class Credentials(token: String, secret: String)
 
 ```scala
 
-// your config
 case class MyConfig(provider: CredentialsProvider)
 
-val config: ConfigDescriptor[MyConfig] = 
-  descriptor[Config] from source
+object MyConfig {
+  val config: ConfigDescriptor[MyConfig] = 
+    descriptor[MyConfig] from source
+}
 
-read(config)
+// Pass the program to read action
+read(MyConfig.config)
 // MyConfig(Credentials(..))
 
 ```
@@ -190,6 +184,7 @@ val commandLine: ConfigSource = fromCommandLineArgs
 
 // orElse
 val mySource = sysEnv <> commandLine
+
 read(config from mySource)
 
 
@@ -197,15 +192,19 @@ read(config from mySource)
 
 ---
 
-## Attach ConfigSource to ConfigDescriptor
+## Datasource overrides
 
 ```scala
 
+// Individually tag sources
 val x = string("username") from systemEnv
 val y = string("password") from credentialSource
 
-(x |@| y)(MyConfig.apply, MyConfig.unapply)
-
+val config: ConfigDescriptor[MyConfig] = 
+ (x |@| y)(MyConfig.apply, MyConfig.unapply)
+ 
+// Override all sources with a constant mapSource
+config.updateSource(complexSource => mapSource <> complexSource)
 
 ```
 ---
@@ -218,6 +217,10 @@ val config: ConfigDescriptor[MyConfig] =
 
 generateDocs(config)
   .toTable.toGithubFlavouredMarkdown
+
+// Or
+generateDocs(config)
+  .toTable.toConfluenceFlavouredMarkdown
 
 ```
 
@@ -233,17 +236,18 @@ generateDocs(config)
 
 ```scala
 
- sealed trait Region
+ sealed trait AwsRegion
 
- @name("ap-southeast")
- case object ApSouthEast2 extends Region
+ object AwsRegion {
+   @name("ap-southeast")
+   case object ApSouthEast2 extends AwsRegion
 
- @name("usEast")
- case object UsEast extends Region
+   @name("us-east")
+   case object UsEast extends AwsRegion
+ }
 
  final case class Database(port: Int, host: java.net.URL)
  final case class MyConfig(region: Region, database: Database)
-
 
 ```
 
@@ -279,17 +283,41 @@ Chunk({
 
 ```scala
 
-  val config: ConfigDescriptor[MyConfig] = 
+  val description: ConfigDescriptor[MyConfig] = 
     descriptor[MyConfig]
 
   val myConfig: MyConfig = 
     MyConfig(UsEast, Database(8908, http://abc))
 
-  myConfig.toJson(config)
-  myConfig.toMap(config)
+
+  // Pass program to toMap action
+  myConfig.toMap(description)
+
+   Map(
+    "region" -> "us-east", 
+    "database.port" -> "8908",
+    "database.host" -> "http://abc"
+   )
 
 ```
 
+---
+## It can write back!
+
+```scala
+
+  // Pass program toHoconString action
+  myConfig.toHoconString(description)
+
+  { 
+    region : us-east, 
+    database : { 
+      port : 8908, 
+      host : http://abc 
+    }
+  }
+
+```
 ---
 
 ## Work with Refined types
@@ -299,14 +327,19 @@ Chunk({
 
  // No more manual validations
 
- case class RefinedConfig(
-   port: Refined[Int, GreaterEqual[W.`1024`.T]],
-   dbUrl: Option[Refined[String, NonEmpty]]
+ type NonEmptyString  = Refined[String, NonEmpty]
+ type GreaterThan1024 = Refined[Int, Greater[W.`1024`.T]]
+
+ final case class RefinedConfig(
+   dbUrl: NonEmptyString,
+   port: GreaterThan1024
  )
 
- More it is in static, the more it is reliable..
-
+// More you push towards static world, more reliable your program becomes!
+ 
 ```
+
+
 
 ---
 
@@ -383,17 +416,6 @@ val yamlSource = YamlConfigSource.fromYamlFile(...)
 ```
 
 ---
-## Prioritised config source
-
-
-```scala    
-  
-  // <> is orElse
-  val source = 
-   commandLine <> systemEnv <> propertySource
-
-```
----
 
 ## Attach sources to descriptor
 
@@ -453,38 +475,27 @@ val updatedConfig =
 
 ```scala
 
- final case class Host(url: String)
-
- final case class MyConfig(port: Port, host: String)
-
- val hostCfg = string("host")
-
- val config = (portCfg |@| string("host"))(MyConfig.apply, MyConfig.unapply)
-
-```
-
----
-
-## Data types
-
-```scala
- val config: ConfigDescriptor[String] = 
-   string("username")
-
- // says, key username has a value of the type string
-
-```
-
----
-
-## Data types
-
-```scala
-
  
  val config: ConfigDescriptor[List[Int]] = 
   list("ports")(int)
- //  says key usernames has a value of the type of list of string
+ // if string("username")   ==> key username has a value of type String
+ // then list("ports")(int) ==> says key "ports" has value of type of List[Int]
+
+```
+
+---
+
+## Manual and Refined
+
+```scala
+
+  // returns ConfigDescriptor[Refined[Int, NonEmpty]]
+  refined[String, NonEmpty]("DB_URL").optional
+
+  // which can return ConfigDescriptor[Refined[List[Int], Size[Greater[W.2.T]]
+  refined[Size[Greater[W.2.T]](
+    list("PORT")(int)
+  )
 
 ```
 
@@ -522,23 +533,8 @@ There needn't be keys too. We will see why
 
 ---
 
-### An example of a list
 
-```scala
-
- case class Data(bucket: String, prefix: String)
- case class Config(tables: List[Data])
-  
- val config = 
-  list("tables")(descriptor[Data])(Config.apply, Config.unapply)
-
- // Same as: val config = descriptor[Config]
-
-```
-
----
-
-## An example of Either
+## Let's see that through Either
 
 ```scala
  
@@ -594,12 +590,12 @@ There needn't be keys too. We will see why
   
 sealed trait VersionStrategy
 
-  object VersionStrategy {
-    case object Latest        extends VersionStrategy
-    case class Number(n: Int) extends VersionStrategy
-  }
+object VersionStrategy {
+  case object Latest        extends VersionStrategy
+  case class Number(n: Int) extends VersionStrategy
+}
 
-  final case class VersionInfo(name: String, strategy: VersionStrategy)
+final case class VersionInfo(name: String, strategy: VersionStrategy)
 
  
 ```
@@ -610,12 +606,12 @@ sealed trait VersionStrategy
 ```scala
 
   final case class Database(host: java.net.URL, port: Int)
-
-  // Think of how this would look in actual source
+  
   final case class MyConfig(
     database: Database, versionInfo: VersionInfo, inputDir: String
   )
 
+ 
 
 ```
 
@@ -643,7 +639,7 @@ sealed trait VersionStrategy
 
 ---
 
-## Was that as simple as this ?
+## While that can be simplified for the user
 
 
 ```scala
@@ -668,7 +664,7 @@ sealed trait VersionStrategy
 ```scala
 
   val versionConfig = 
-    map(int.orElseEither(string).transformOrfail(
+    map(int.orElseEither(string)).transformOrfail(
       _.headOption match {
           case Some((k, v)) => 
             versionValue match {
@@ -694,32 +690,7 @@ sealed trait VersionStrategy
   implicit val versionInfo: Descriptor[VersionInfo] = 
     Descriptor(versionConfig)
   
-  val config = descriptor[MyConfig]    
-```
-
----
-
-## How do you communicate this to the user
-
-```scala
-
-  val config = descriptor[MyConfig]
-
-  generateConfigJson(config, 1).unsafeRunChunk
-
- // yields 
-
-    {
-       "database" : {
-           "host" : "http://abc",
-           "port" : "5502"
-       },
-       "inputDir" : "5Vf0GTG",
-       "versionInfo" : {
-           "QK8mNc5eciBlH" : "latest"
-       }
-    } 
-
+  val config = descriptor[MyConfig].mapKey(toKebabCase)    
 ```
 
 ---
