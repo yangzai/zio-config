@@ -3,7 +3,14 @@
 
 ---
 
-## Simple Configs are easy isn't it?
+## I am
+
+Afsal, Sydney
+Working at Simple Machines
+
+
+---
+## Isn't config already easy?
 
 ```scala
 
@@ -49,7 +56,7 @@ We will cover these and a lot more..
 
 ---
 
-## Let's see some example code using ZIO-Config
+## ZIO Config & Example usage
 
 ```scala
 
@@ -253,8 +260,8 @@ generateDocs(config)
    case object UsEast extends AwsRegion
  }
 
- final case class Database(port: Int, host: java.net.URL)
- final case class MyConfig(region: Region, database: Database)
+ final case class Endpoint(port: Int, host: java.net.URL)
+ final case class MyConfig(region: Region, endpoint: Endpoint)
 
 ```
 
@@ -268,14 +275,14 @@ generateConfigJson(descriptor[MyConfig], 2).unsafeRunChunk
 // yields 
 
 Chunk({
-    "database" : {
+    "endpoint" : {
         "host" : "http://def",
         "port" : "7300"
     },
     "region" : "ap-southeast"
   }
 , {
-    "database" : {
+    "endpoint" : {
         "host" : "http://abc",
         "port" : "8908"
     },
@@ -294,7 +301,7 @@ Chunk({
     descriptor[MyConfig]
 
   val myConfig: MyConfig = 
-    MyConfig(UsEast, Database(8908, http://abc))
+    MyConfig(UsEast, Endpoint(8908, http://abc))
 
   // Pass program to toMap action
   // write(description, myConfig).map(tree => ..)
@@ -302,8 +309,8 @@ Chunk({
 
    Map(
     "region" -> "us-east", 
-    "database.port" -> "8908",
-    "database.host" -> "http://abc"
+    "endpoint.port" -> "8908",
+    "endpoint.host" -> "http://abc"
    )
 
 ```
@@ -318,7 +325,7 @@ Chunk({
 
   { 
     region : us-east, 
-    database : { 
+    endpoint : { 
       port : 8908, 
       host : http://abc 
     }
@@ -338,8 +345,8 @@ Chunk({
  type GreaterThan1024 = Refined[Int, Greater[W.`1024`.T]]
 
  final case class RefinedConfig(
-   dbUrl: NonEmptyString,
-   port: GreaterThan1024
+   username: NonEmptyString,
+   id: GreaterThan1024
  )
 
 // More you push towards static world, more reliable your program becomes!
@@ -356,7 +363,7 @@ Chunk({
 
   val invalidSource =
     ConfigSource.fromMap(
-      Map("port" -> "10", "dbUrl" -> "")
+      Map("id" -> "10", "username" -> "")
     )
 
   read(
@@ -380,12 +387,12 @@ Chunk({
   ║  ║  ║
   ║  ║  ╠─ConversionError
   ║  ║  ║ cause: Predicate isEmpty() did not fail.
-  ║  ║  ║ path: dbUrl
+  ║  ║  ║ path: username
   ║  ║  ▼
   ║  ║
   ║  ╠─ConversionError
   ║  ║ cause: Predicate (10 < 1024) did not fail.
-  ║  ║ path: port
+  ║  ║ path: id
   ║  ▼
   ▼)
 
@@ -482,17 +489,20 @@ val updatedConfig =
 
 ```scala
 
+  // int here is ConfigDescriptor[Int]
+  val config: ConfigDescriptor[List[Int]] = 
+    list("ports")(int)
  
- val config: ConfigDescriptor[List[Int]] = 
-  list("ports")(int)
- // if string("username")   ==> there exists key "username" and value is of type String
- // then list("ports")(int) ==> there exists key "ports" and value is of type List[Int]
+  // How to read?
+  
+  // if string("username")   implies there exists key "username" and value is of type String
+  // then list("ports")(int) implies there exists key "ports" and value is of type List[Int]
 
 ```
 
 ---
 
-## Manual and Refined
+## Manual, Yet Refined
 
 ```scala
 
@@ -547,7 +557,7 @@ There needn't be keys too. We will see why
  
  val config = nested("version")(double orElseEither string)
 
- // Same as: int("version") orElseEither string("version")
+ // Same as: double("version") orElseEither string("version")
 
 ```
 
@@ -674,7 +684,7 @@ final case class VersionInfo(name: String, strategy: VersionStrategy)
     map(int.orElseEither(string)).transformOrfail(
       _.headOption match {
           case Some((k, v)) => 
-            versionValue match {
+            v match {
               case Right(string) if string == "latest" => Right(VersionInfo(k, Latest))
               case Left(n) => Right(VersionInfo(k, Number(n)))
               case Right(v) => Left(..) 
@@ -729,9 +739,7 @@ final case class VersionInfo(name: String, strategy: VersionStrategy)
 
 ## And a lot more
 
- https://github.com/zio/zio-config/tree/gen/examples
+ **_~30 Examples_** in https://github.com/zio/zio-config/tree/gen/examples
  
- https://zio.github.io/zio-config/
- 
- https://javadoc.io/doc/dev.zio/zio-config_2.12/latest/index.html
+ **_Website_** at https://zio.github.io/zio-config/
  
