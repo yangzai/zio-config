@@ -24,7 +24,7 @@ trait ConfigDescriptorModule extends ConfigSourceModule { module =>
      *    val port: ConfigDescriptor[Int] = int("PORT")
      *  }}}
      *
-     * For some reason, if we decide to convert `Int` to `String,
+     * For some reason, if we decide to convert `Int` to `String`,
      * `A => B` becomes `Int => String` and that will always work.
      *
      * However, the reverse relationship which is `String => Int` is no more a
@@ -503,6 +503,86 @@ trait ConfigDescriptorModule extends ConfigSourceModule { module =>
      */
     final def describe(description: String): ConfigDescriptor[A] =
       ConfigDescriptorAdt.describeDesc(self, description)
+
+    /**
+     * Fetch the description of all keys at each level (if it's nested)
+     */
+    lazy val descriptions: Map[List[K], List[String]] = {
+      val descriptors: ListBuffer[ConfigDescriptor[_]] =
+        ListBuffer()
+
+      def loop[B](
+        config: ConfigDescriptor[B],
+        keys: List[K],
+        result: Map[List[K], List[String]]
+      ): Map[List[K], List[String]] = {
+        def runLoop(config: ConfigDescriptor[_], key: Option[K], description: Option[String]) = {
+          val updatedKeys: List[K] = key match {
+            case Some(key) => keys :+ key
+            case None      => keys
+          }
+
+          result.get(keys) match {
+            case Some(descs) =>
+              loop(
+                config.asInstanceOf[ConfigDescriptor[B]],
+                updatedKeys,
+                result.updated(updatedKeys, description.fold(descs)(desc => descs :+ desc))
+              )
+            case None =>
+              loop(
+                config.asInstanceOf[ConfigDescriptor[B]],
+                updatedKeys,
+                description.fold(result)(desc => result.updated(updatedKeys, List(desc)))
+              )
+          }
+        }
+
+        config match {
+          case Default(config, _) =>
+            loop(config, keys, result)
+
+          case Describe(config, message) =>
+            runLoop(config, None, Some(message))
+
+          case DynamicMap(_, config) =>
+            runLoop(config, None, None)
+
+          case c @ Lazy(thunk) =>
+            val res = thunk()
+
+            if (descriptors.contains(c)) {
+              result
+            } else {
+
+              descriptors += c
+              runLoop(res, None, None)
+            }
+
+          case Nested(_, path, config) =>
+            runLoop(config, Some(path), None)
+
+          case Optional(config) =>
+            runLoop(config, None, None)
+
+          case OrElse(left, right) =>
+            runLoop(left, None, None) ++ runLoop(right, None, None)
+
+          case OrElseEither(left, right) =>
+            runLoop(left, None, None) ++ runLoop(right, None, None)
+          case Sequence(_, config) =>
+            runLoop(config, None, None)
+          case Source(_, _) =>
+            result
+          case Zip(left, right) =>
+            runLoop(left, None, None) ++ runLoop(right, None, None)
+          case TransformOrFail(config, _, _) =>
+            runLoop(config, None, None)
+        }
+      }
+
+      loop(self, Nil, Map.empty)
+    }
 
     /**
      * Attach a source to the `ConfigDescriptor`.
